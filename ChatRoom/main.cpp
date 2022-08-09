@@ -8,10 +8,13 @@ using namespace std;
 
 ENetAddress address;
 ENetHost* client;
+ENetPeer* peer;
 
 string name;
 
 thread inputThread;
+
+bool disconnect = false;
 
 bool CreateClient()
 {
@@ -25,7 +28,7 @@ bool CreateClient()
     return client != NULL;
 }
 
-void BroadcastMessage(string message)
+void SendMessage(string message)
 {
     /* Create a reliable packet of size 7 containing "packet\0" */
     ENetPacket* packet = enet_packet_create(message.c_str(),
@@ -40,17 +43,48 @@ void BroadcastMessage(string message)
     enet_host_flush(client);
 }
 
+void LeaveChat()
+{
+    ENetEvent event;
+    enet_peer_disconnect(peer, 0);
+
+    /* Allow up to 3 seconds for the disconnect to succeed
+     * and drop any packets received packets.
+     */
+    while (enet_host_service(client, &event, 3000) > 0)
+    {
+        switch (event.type)
+        {
+        case ENET_EVENT_TYPE_RECEIVE:
+            enet_packet_destroy(event.packet);
+            break;
+        case ENET_EVENT_TYPE_DISCONNECT:
+            cout << "Disconnection succeeded." << endl;
+            return;
+        }
+    }
+
+    /* We've arrived here, so the disconnect attempt didn't */
+    /* succeed yet.  Force the connection down.             */
+    enet_peer_reset(peer);
+}
+
 void ProcessInput()
 {
-    while (true)
+    while (!disconnect)
     {
-        cin.ignore();
-
-        string message;
+        string message = "";
         getline(cin, message);
-
-        string finalMessage = name + ": " + message;
-        BroadcastMessage(finalMessage);
+        
+        if (message == "quit")
+        {
+            disconnect = true;
+        }
+        else if (message.length() > 0)
+        {
+            string finalMessage = name + ": " + message;
+            SendMessage(finalMessage);
+        }
     }
 }
 
@@ -79,7 +113,6 @@ int main(int argc, char** argv)
     }
 
     ENetEvent event;
-    ENetPeer* peer;
 
     /* Connect to host */
     enet_address_set_host(&address, "127.0.0.1");
@@ -99,7 +132,7 @@ int main(int argc, char** argv)
     if (enet_host_service(client, &event, 5000) > 0 &&
         event.type == ENET_EVENT_TYPE_CONNECT)
     {
-        cout << "You are now connected to chat." << endl << endl;
+        cout << "Connected to chat." << endl;
 
         inputThread = thread(ProcessInput);
     }
@@ -112,7 +145,7 @@ int main(int argc, char** argv)
         cout << "Connection to 127.0.0.1:1234 failed." << endl;
     }
 
-    while (true)
+    while (!disconnect)
     {
         ENetEvent event;
 
@@ -131,6 +164,9 @@ int main(int argc, char** argv)
             }
         }
     }
+
+    LeaveChat();
+    inputThread.join();
 
     if (client != NULL) enet_host_destroy(client);
 

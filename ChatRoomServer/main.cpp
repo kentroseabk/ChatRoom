@@ -25,7 +25,7 @@ bool CreateServer()
     return server != NULL;
 }
 
-void BroadcastMessage(string message)
+void SendMessage(string message)
 {
     /* Create a reliable packet of size 7 containing "packet\0" */
     ENetPacket* packet = enet_packet_create(message.c_str(),
@@ -38,6 +38,19 @@ void BroadcastMessage(string message)
 
     /* One could just use enet_host_service() instead. */
     enet_host_flush(server);
+}
+
+int GetNumberOfConnections()
+{
+    int total = 0;
+
+    for (int i = 0; i < server->peerCount; i++)
+    {
+        ENetPeer tempPeer = server->peers[i];
+        if (tempPeer.state == ENET_PEER_STATE_CONNECTED) total++;
+    }
+
+    return total;
 }
 
 int main(int argc, char** argv)
@@ -71,20 +84,30 @@ int main(int argc, char** argv)
             switch (event.type)
             {
             case ENET_EVENT_TYPE_CONNECT:
-                BroadcastMessage("System: A new user has connected.");
+                cout << "System: A new peer has connected. Connections: "
+                    << GetNumberOfConnections() << endl;
+
+                SendMessage("A new user has entered the chat.");
 
                 break;
             case ENET_EVENT_TYPE_RECEIVE:
-                // relay the message to all users
-                BroadcastMessage((char*)event.packet->data);
+            {
+                string eventPacketData = "";
+                eventPacketData = (char*)event.packet->data;
+
+                // relay the message ('m' means message) to all users
+                SendMessage(eventPacketData);
 
                 /* Clean up the packet now that we're done using it. */
                 enet_packet_destroy(event.packet);
 
                 break;
-
+            }
             case ENET_EVENT_TYPE_DISCONNECT:
-                BroadcastMessage("A user has disconnected.");
+                cout << "System: A peer has disconnected. Connections: "
+                    << GetNumberOfConnections() << endl;
+
+                SendMessage("A user has left the chat.");
 
                 /* Reset the peer's client information. */
                 event.peer->data = NULL;
