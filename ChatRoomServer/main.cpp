@@ -1,10 +1,21 @@
 #include <enet/enet.h>
 #include <iostream>
+#include <chrono>
 
 using namespace std;
 
 ENetAddress address;
 ENetHost* server;
+
+const int fakeMessageTime = 4;
+int lastFakeMessage = 0;
+
+const int fakeMessagesSize = 5;
+string fakeMessages[fakeMessagesSize] = {"Just who do you think you are?", 
+                                        "It's time for you to leave.", 
+                                        "ITS OVER 9000", 
+                                        "Do you really think you should have said that?", 
+                                        "How about no?"};
 
 bool CreateServer()
 {
@@ -25,6 +36,12 @@ bool CreateServer()
     return server != NULL;
 }
 
+uint32_t GetTime()
+{
+    using namespace std::chrono;
+    return static_cast<uint32_t>(duration_cast<seconds>(system_clock::now().time_since_epoch()).count());
+}
+
 void SendMessage(string message)
 {
     /* Create a reliable packet of size 7 containing "packet\0" */
@@ -38,6 +55,17 @@ void SendMessage(string message)
 
     /* One could just use enet_host_service() instead. */
     enet_host_flush(server);
+}
+
+void CheckIfShouldSendFakeMessage()
+{
+    int currentTime = GetTime();
+    if (currentTime > lastFakeMessage + fakeMessageTime)
+    {
+        // send fake message
+        SendMessage("Mysterious User: " + fakeMessages[rand() % fakeMessagesSize]);
+        lastFakeMessage = currentTime;
+    }
 }
 
 int GetNumberOfConnections()
@@ -55,6 +83,9 @@ int GetNumberOfConnections()
 
 int main(int argc, char** argv)
 {
+    /* initialize random seed: */
+    srand(time(NULL));
+
     if (enet_initialize() != 0)
     {
         fprintf(stderr, "An error occurred while initializing ENet.\n");
@@ -113,6 +144,8 @@ int main(int argc, char** argv)
                 event.peer->data = NULL;
             }
         }
+
+        CheckIfShouldSendFakeMessage();
     }
 
     if (server != NULL) enet_host_destroy(server);
