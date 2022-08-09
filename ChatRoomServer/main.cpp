@@ -126,7 +126,6 @@ int main(int argc, char** argv)
                 string eventPacketData = "";
                 eventPacketData = (char*)event.packet->data;
 
-                // relay the message ('m' means message) to all users
                 SendMessage(eventPacketData);
 
                 /* Clean up the packet now that we're done using it. */
