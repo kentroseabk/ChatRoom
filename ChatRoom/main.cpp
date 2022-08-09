@@ -12,6 +12,9 @@ ENetPeer* peer;
 
 string name;
 
+const char messageTypeMessage = 'm';
+const char messageTypeConnect = 'c';
+
 thread inputThread;
 
 bool disconnect = false;
@@ -82,7 +85,7 @@ void ProcessInput()
         }
         else if (message.length() > 0)
         {
-            string finalMessage = name + ": " + message;
+            string finalMessage = messageTypeMessage + message;
             SendMessage(finalMessage);
         }
     }
@@ -133,6 +136,8 @@ int main(int argc, char** argv)
         event.type == ENET_EVENT_TYPE_CONNECT)
     {
         cout << "Connected to chat." << endl;
+
+        SendMessage(messageTypeConnect + name);
 
         inputThread = thread(ProcessInput);
     }

@@ -1,13 +1,14 @@
 #include <enet/enet.h>
 #include <iostream>
 #include <chrono>
+#include <map>
 
 using namespace std;
 
 ENetAddress address;
 ENetHost* server;
 
-const int fakeMessageTime = 4;
+const int fakeMessageTime = 15;
 int lastFakeMessage = 0;
 
 const int fakeMessagesSize = 5;
@@ -16,6 +17,11 @@ string fakeMessages[fakeMessagesSize] = {"Just who do you think you are?",
                                         "ITS OVER 9000", 
                                         "Do you really think you should have said that?", 
                                         "How about no?"};
+
+map<ENetPeer*, string> peerToNameMap;
+
+const char messageTypeMessage = 'm';
+const char messageTypeConnect = 'c';
 
 bool CreateServer()
 {
@@ -34,6 +40,18 @@ bool CreateServer()
         0      /* assume any amount of outgoing bandwidth */);
 
     return server != NULL;
+}
+
+string GetUserNameFromPeer(ENetPeer* peer)
+{
+    auto iterator = peerToNameMap.find(peer);
+
+    if (iterator != peerToNameMap.end())
+    {
+        return peerToNameMap.at(peer);
+    }
+
+    return nullptr;
 }
 
 uint32_t GetTime()
@@ -57,17 +75,6 @@ void SendMessage(string message)
     enet_host_flush(server);
 }
 
-void CheckIfShouldSendFakeMessage()
-{
-    int currentTime = GetTime();
-    if (currentTime > lastFakeMessage + fakeMessageTime)
-    {
-        // send fake message
-        SendMessage("Mysterious User: " + fakeMessages[rand() % fakeMessagesSize]);
-        lastFakeMessage = currentTime;
-    }
-}
-
 int GetNumberOfConnections()
 {
     int total = 0;
@@ -79,6 +86,36 @@ int GetNumberOfConnections()
     }
 
     return total;
+}
+
+void CheckIfShouldSendFakeMessage()
+{
+    int numberOfConnections = GetNumberOfConnections();
+
+    int currentTime = GetTime();
+    if (numberOfConnections > 1 && currentTime > lastFakeMessage + fakeMessageTime)
+    {
+        int randomUserNameIndex = rand() % numberOfConnections;
+
+        string userName = "";
+
+        int i = 0;
+
+        for (auto iterator = peerToNameMap.begin(); iterator != peerToNameMap.end(); ++iterator)
+        {
+            if (i == randomUserNameIndex)
+            {
+                userName = iterator->second;
+                break;
+            }
+
+            i++;
+        }
+
+        // send fake message
+        SendMessage(userName + ": " + fakeMessages[rand() % fakeMessagesSize]);
+        lastFakeMessage = currentTime;
+    }
 }
 
 int main(int argc, char** argv)
@@ -118,15 +155,29 @@ int main(int argc, char** argv)
                 cout << "System: A new peer has connected. Connections: "
                     << GetNumberOfConnections() << endl;
 
-                SendMessage("A new user has entered the chat.");
-
                 break;
             case ENET_EVENT_TYPE_RECEIVE:
             {
-                string eventPacketData = "";
-                eventPacketData = (char*)event.packet->data;
+                string eventPacketData = (char*)event.packet->data;
 
-                SendMessage(eventPacketData);
+                char messageType = eventPacketData[0];
+                string restOfMessage = eventPacketData.substr(1);
+
+                if (messageType == messageTypeConnect)
+                {
+                    auto iterator = peerToNameMap.find(event.peer);
+                    
+                    if (iterator == peerToNameMap.end())
+                    {
+                        peerToNameMap.insert(pair<ENetPeer*, string>(event.peer, restOfMessage));
+
+                        SendMessage(restOfMessage + " has entered the chat.");
+                    }
+                }
+                else if (messageType == messageTypeMessage)
+                {
+                    SendMessage(GetUserNameFromPeer(event.peer) + ": " + restOfMessage);
+                }
 
                 /* Clean up the packet now that we're done using it. */
                 enet_packet_destroy(event.packet);
@@ -137,7 +188,14 @@ int main(int argc, char** argv)
                 cout << "System: A peer has disconnected. Connections: "
                     << GetNumberOfConnections() << endl;
 
-                SendMessage("A user has left the chat.");
+                auto iterator = peerToNameMap.find(event.peer);
+
+                if (iterator != peerToNameMap.end())
+                {
+                    SendMessage(GetUserNameFromPeer(event.peer) + " has left the chat.");
+
+                    peerToNameMap.erase(iterator);
+                }
 
                 /* Reset the peer's client information. */
                 event.peer->data = NULL;
