@@ -118,6 +118,45 @@ void CheckIfShouldSendFakeMessage()
     }
 }
 
+void HandleEventTypeReceive(ENetEvent event)
+{
+    string eventPacketData = (char*)event.packet->data;
+
+    char messageType = eventPacketData[0];
+    string restOfMessage = eventPacketData.substr(1);
+
+    if (messageType == messageTypeConnect)
+    {
+        auto iterator = peerToNameMap.find(event.peer);
+
+        if (iterator == peerToNameMap.end())
+        {
+            peerToNameMap.insert(pair<ENetPeer*, string>(event.peer, restOfMessage));
+
+            SendMessage(restOfMessage + " has entered the chat.");
+        }
+    }
+    else if (messageType == messageTypeMessage)
+    {
+        SendMessage(GetUserNameFromPeer(event.peer) + ": " + restOfMessage);
+    }
+}
+
+void HandleEventTypeDisconnect(ENetEvent event)
+{
+    cout << "System: A peer has disconnected. Connections: "
+        << GetNumberOfConnections() << endl;
+
+    auto iterator = peerToNameMap.find(event.peer);
+
+    if (iterator != peerToNameMap.end())
+    {
+        SendMessage(GetUserNameFromPeer(event.peer) + " has left the chat.");
+
+        peerToNameMap.erase(iterator);
+    }
+}
+
 int main(int argc, char** argv)
 {
     /* initialize random seed: */
@@ -158,26 +197,7 @@ int main(int argc, char** argv)
                 break;
             case ENET_EVENT_TYPE_RECEIVE:
             {
-                string eventPacketData = (char*)event.packet->data;
-
-                char messageType = eventPacketData[0];
-                string restOfMessage = eventPacketData.substr(1);
-
-                if (messageType == messageTypeConnect)
-                {
-                    auto iterator = peerToNameMap.find(event.peer);
-                    
-                    if (iterator == peerToNameMap.end())
-                    {
-                        peerToNameMap.insert(pair<ENetPeer*, string>(event.peer, restOfMessage));
-
-                        SendMessage(restOfMessage + " has entered the chat.");
-                    }
-                }
-                else if (messageType == messageTypeMessage)
-                {
-                    SendMessage(GetUserNameFromPeer(event.peer) + ": " + restOfMessage);
-                }
+                HandleEventTypeReceive(event);
 
                 /* Clean up the packet now that we're done using it. */
                 enet_packet_destroy(event.packet);
@@ -185,17 +205,7 @@ int main(int argc, char** argv)
                 break;
             }
             case ENET_EVENT_TYPE_DISCONNECT:
-                cout << "System: A peer has disconnected. Connections: "
-                    << GetNumberOfConnections() << endl;
-
-                auto iterator = peerToNameMap.find(event.peer);
-
-                if (iterator != peerToNameMap.end())
-                {
-                    SendMessage(GetUserNameFromPeer(event.peer) + " has left the chat.");
-
-                    peerToNameMap.erase(iterator);
-                }
+                HandleEventTypeDisconnect(event);
 
                 /* Reset the peer's client information. */
                 event.peer->data = NULL;
