@@ -11,6 +11,7 @@ ENetHost* client;
 ENetPeer* peer;
 
 string name;
+string chatPrompt;
 
 const char messageTypeMessage = 'm';
 const char messageTypeConnect = 'c';
@@ -18,6 +19,10 @@ const char messageTypeConnect = 'c';
 thread inputThread;
 
 bool disconnect = false;
+
+string messageBuffer = "";
+
+bool redisplayInput = false;
 
 bool CreateClient()
 {
@@ -72,21 +77,62 @@ void LeaveChat()
     enet_peer_reset(peer);
 }
 
+void ClearInputLine()
+{
+    // clear whatever user has input
+    for (int i = 0; i < chatPrompt.length() + messageBuffer.length(); i++)
+    {
+        cout << '\b';
+        cout << ' ';
+        cout << '\b';
+    }
+}
+
 void ProcessInput()
 {
     while (!disconnect)
     {
-        string message = "";
-        getline(cin, message);
-        
-        if (message == "quit")
+        if (redisplayInput)
         {
-            disconnect = true;
+            cout << chatPrompt + messageBuffer;
+            redisplayInput = false;
         }
-        else if (message.length() > 0)
+
+        int input = -1;
+
+        if (_kbhit())
         {
-            string finalMessage = messageTypeMessage + message;
-            SendMessage(finalMessage);
+            input = _getch();
+
+            char charInput = (char)input;
+            if (charInput == '\r')
+            {
+                if (messageBuffer.length() > 0)
+                {
+                    if (messageBuffer == "quit")
+                    {
+                        disconnect = true;
+                    }
+                    else
+                    {
+                        string finalMessage = messageTypeMessage + messageBuffer;
+                        ClearInputLine();
+                        messageBuffer = "";
+
+                        SendMessage(finalMessage);
+                    }
+                }
+            }
+            else if (charInput == '\b')
+            {
+                messageBuffer = messageBuffer.substr(0, messageBuffer.length() - 1);
+                cout << "\b \b";
+            }
+            else
+            {
+                cout << charInput;
+                messageBuffer += charInput;
+            }
         }
     }
 }
@@ -96,6 +142,8 @@ int main(int argc, char** argv)
     cout << "What is your name?" << endl;
 
     cin >> name;
+
+    chatPrompt = name + ": ";
 
     cout << endl;
 
@@ -160,7 +208,11 @@ int main(int argc, char** argv)
             switch (event.type)
             {
             case ENET_EVENT_TYPE_RECEIVE:
+                ClearInputLine();
+
                 cout << (char*)event.packet->data << endl;
+
+                redisplayInput = true;
 
                 /* Clean up the packet now that we're done using it. */
                 enet_packet_destroy(event.packet);

@@ -8,7 +8,7 @@ using namespace std;
 ENetAddress address;
 ENetHost* server;
 
-const int fakeMessageTime = 15;
+const int fakeMessageTime = 5;
 int lastFakeMessage = 0;
 
 const int fakeMessagesSize = 5;
